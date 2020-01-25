@@ -7,6 +7,10 @@
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.text.ParseException;
@@ -14,6 +18,10 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
+import java.util.Properties;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import mt940.MT940File;
 import mt940.MT940Section;
 import mt940.TOB5BookingCodeTranslator;
@@ -43,9 +51,16 @@ public class CsvToMT940 {
 	private static final int MAX_BOOKING_TEXT = 27;
 	private static final SimpleDateFormat inFormat = new SimpleDateFormat("dd.MM.yyyy");
 	private static final CSVFormat csvFormat = CSVFormat.DEFAULT.withDelimiter(';');
-	private final CsvToMT940Frame ctmf;
-	private String[][] csvData;
-	private Date startDate;
+	private static String[][] csvData;
+	private static Date startDate;
+
+	private static Properties config;
+	private static String inputFile;
+	private static String outputFile;
+	private static String iban;
+	private static String bic;
+	private static String currency;
+	private static double closingBalance;
 
 	/* public static String autoDecode(byte[] bytes) {
 		// fix charset
@@ -85,15 +100,124 @@ public class CsvToMT940 {
 		}
 		return new String(bytes);
 	} */
-	public CsvToMT940(CsvToMT940Frame ctmf) {
-		this.ctmf = ctmf;
+	public static void main(String[] args) {
+		// parse ini file
+		File jarPath=new File(CsvToMT940.class.getProtectionDomain().getCodeSource().getLocation().getPath());
+		String configFilename = jarPath.getParentFile().getAbsolutePath() + "\\config.ini"; // System.getProperty("user.home") + pathSeparator + ".CSV2MT940" + pathSeparator + "config.ini";
+		System.out.println("Trying to read " + configFilename);
+		File configFile = new File(configFilename);
+		config = new Properties();
+		if (configFile.canRead()) {
+			FileInputStream configFileStream = null;
+			InputStreamReader isr = null;
+			try {
+				configFileStream = new FileInputStream(configFile);
+				isr = new InputStreamReader(configFileStream, "UTF-8");
+				config.load(isr);
+			} catch (IOException ex) {
+				Logger.getLogger(CsvToMT940.class.getName()).log(Level.SEVERE, null, ex);
+			} finally {
+				IOUtils.closeQuietly(configFileStream);
+				IOUtils.closeQuietly(isr);
+			}
+		}
+
+		Logger logger = Logger.getLogger(CsvToMT940.class.getName());
+
+		// Load input directory
+		inputFile = getConfigParam("inputcsv");
+		if (inputFile == null || inputFile.isEmpty()) {
+			logger.log(Level.SEVERE, "No input csv file provided in config.ini, aborting!");
+			return;
+		}
+
+		// Load input directory
+		outputFile = getConfigParam("outputfile");
+		if (outputFile == null || outputFile.isEmpty()) {
+			logger.log(Level.SEVERE, "No output file provided in config.ini, aborting!");
+			return;
+		}
+
+		// Account number
+		iban = getConfigParam("iban");
+		if (iban == null || iban.isEmpty()) {
+			logger.log(Level.SEVERE, "No iban provided in config.ini, aborting!");
+			return;
+		}
+
+		// BankSortingCode
+		bic = getConfigParam("iban");
+		if (bic == null || bic.isEmpty()) {
+			logger.log(Level.SEVERE, "No bic provided in config.ini, aborting!");
+			return;
+		}
+
+		// Currency
+		currency = getConfigParam("currency");
+		if (currency == null || currency.isEmpty()) {
+			logger.log(Level.SEVERE, "No currency provided in config.ini, aborting!");
+			return;
+		}
+
+		// Closing Balance
+		closingBalance = Double.parseDouble(args[0]);
+
+		// Start conversion
+		convert();
 	}
 
-	public int getCount() {
+	private static void convert() {
+		File f = new File(inputFile);
+		loadCSV(f);
+		addInfo("\"" + f.getName() + "\" geladen.");
+		addInfo(getCount() + " Datensätze.");
+		doSave();
+	}
+
+	private static void doSave() {
+		try {
+			MT940File f = createMT940();
+			if (f != null) {
+				String filename = outputFile; // getFilename();
+
+				File sf = new File(filename);
+
+				OutputStreamWriter fw = null;
+				FileOutputStream fos = null;
+				try {
+					fos = new FileOutputStream(sf);
+					fw = new OutputStreamWriter(fos, Charsets.ISO_8859_1);
+					fw.write(f.toString());
+					fw.close();
+					addInfo("Erfolgreich konvertiert.");
+				} catch (IOException e1) {
+					e1.printStackTrace();
+					addInfo("Fehler! Bitte in die Java-Konsole schauen.");
+				} finally {
+					IOUtils.closeQuietly(fw);
+					IOUtils.closeQuietly(fos);
+				}
+			}
+		} catch (Exception ex) {
+			addInfo("Fehler: " + ex.getMessage());
+		}
+	}
+
+	public static void addInfo(String info) {
+		System.out.println(info);
+		Logger.getLogger(CsvToMT940.class.getName()).log(Level.INFO, info);
+	}
+
+	private static String getConfigParam(String key) {
+		Object value = config.get(key);
+		return (value != null ? value.toString() : "");
+	}
+
+	public static int getCount() {
 		return csvData.length - 1; // 1st line is headline
 	}
 
-	public void loadCSV(File csvfile) {
+	public static void loadCSV(File csvfile) {
 		FileInputStream fis = null;
 		//String csvdata = null;
 		try {
@@ -135,17 +259,20 @@ public class CsvToMT940 {
 		return "";
 	}
 
-	public MT940File createMT940() {
+	public static Double getClosingBalance() {
+		return closingBalance;
+	}
+
+	public static MT940File createMT940() {
 		// reset
 		startDate = null;
 
 		// get data entered by user
-		String currency = ctmf.getCurrency(),
-				bankSortingCode = ctmf.getBankSortingCode(),
-				accountNumber = ctmf.getAccountNumber();
-		double closingBalance = ctmf.getClosingBalance(), openingBalance = closingBalance;
+		String bankSortingCode = bic;
+		String accountNumber = iban;
+		double closingBalance = getClosingBalance(), openingBalance = closingBalance;
 
-		int dateIdx = 0, bookingTextIdx = 1, counterPartyIdx = 2, amountIdx = 3;
+		int dateIdx = 1, bookingTextIdx = 3, counterPartyIdx = 12, amountIdx = 14;
 		DecimalFormatSymbols dfs = new DecimalFormatSymbols();
 		dfs.setDecimalSeparator(',');
 		dfs.setGroupingSeparator('.');
@@ -164,6 +291,7 @@ public class CsvToMT940 {
 				if (valueDate != null) {
 					if (startDate == null) {
 						DateTime temp = new DateTime(valueDate).withDayOfMonth(1).withMillisOfDay(0);
+						addInfo("Startdate: " + temp.toString());
 						startDate = temp.toDate();
 						endDate = temp.plusMonths(1).minusMillis(1).toDate();
 					} else if (startDate.after(valueDate) || endDate.before(valueDate)) {
@@ -255,12 +383,12 @@ public class CsvToMT940 {
 			m.addSection(ms);
 		} catch (ArrayIndexOutOfBoundsException aiobe) {
 			aiobe.printStackTrace();
-			ctmf.addInfo("Keine gültige CSV-Datei! Abbruch...");
+			addInfo("Keine gültige CSV-Datei! Abbruch...");
 			return null;
 
 		} catch (ParseException e) {
 			e.printStackTrace();
-			ctmf.addInfo("Parsing-Fehler! Abbruch...");
+			addInfo("Parsing-Fehler! Abbruch...");
 			return null;
 		}
 		return m;
