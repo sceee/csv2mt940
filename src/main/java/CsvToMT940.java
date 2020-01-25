@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.nio.charset.StandardCharsets;
 
 import mt940.MT940File;
 import mt940.MT940Section;
@@ -186,7 +187,7 @@ public class CsvToMT940 {
 				FileOutputStream fos = null;
 				try {
 					fos = new FileOutputStream(sf);
-					fw = new OutputStreamWriter(fos, Charsets.ISO_8859_1);
+					fw = new OutputStreamWriter(fos, StandardCharsets.UTF_8);
 					fw.write(f.toString());
 					fw.close();
 					addInfo("Erfolgreich konvertiert.");
@@ -225,7 +226,7 @@ public class CsvToMT940 {
 			//csvdata = autoDecode(IOUtils.toByteArray(fis));
 			//CSVParser parser = CSVParser.parse(csvdata, csvFormat);
 
-			CSVParser parser = CSVParser.parse(fis, Charsets.ISO_8859_1, csvFormat);
+			CSVParser parser = CSVParser.parse(fis, StandardCharsets.UTF_8, csvFormat);
 			List<CSVRecord> records = parser.getRecords();
 
 			int recordCount = records.size();
@@ -264,123 +265,88 @@ public class CsvToMT940 {
 	}
 
 	public static MT940File createMT940() {
-		// reset
-		startDate = null;
+		MT940File m = new MT940File();
+		// NumberFormat nf = NumberFormat.getInstance();
 
-		// get data entered by user
-		String bankSortingCode = bic;
-		String accountNumber = iban;
-		double closingBalance = getClosingBalance(), openingBalance = closingBalance;
-
-		int dateIdx = 1, bookingTextIdx = 3, counterPartyIdx = 12, amountIdx = 14;
 		DecimalFormatSymbols dfs = new DecimalFormatSymbols();
 		dfs.setDecimalSeparator(',');
-		dfs.setGroupingSeparator('.');
 		DecimalFormat df = new DecimalFormat("#0.00", dfs);
-		//df.setPositivePrefix("+");
-		df.setGroupingUsed(true);
+		df.setPositivePrefix("+");
+		String checkDate = "";
+		MT940Section ms = new MT940Section();
+		// m.addSection(ms);
+		int statementNumber = 1;
 
-		MT940File m = new MT940File();
 		try {
-			Date endDate = null;
+			double ob = df.parse(csvData[1][3]).doubleValue();
+			// System.out.println("Schlusssaldo:"+ob);
+			for (int a = 1; a < csvData.length
+					&& csvData[1][2].equals(csvData[a][2]); a++) {
+				double ab = df.parse(csvData[a][10]).doubleValue();
+				// System.out.println("Kontoänderung:"+ab);
+				ob -= ab;
+			}
+			Number openingBalance = new Double(ob);
+			// System.out.print(ob);
+			TOB5BookingCodeTranslator tob = new TOB5BookingCodeTranslator();
 
-			// calculate initial balance
 			for (int i = 1; i < csvData.length; i++) {
-				Number amount = df.parse(csvData[i][amountIdx]);
-				Date valueDate = inFormat.parse(csvData[i][dateIdx]);
-				if (valueDate != null) {
-					if (startDate == null) {
-						DateTime temp = new DateTime(valueDate).withDayOfMonth(1).withMillisOfDay(0);
-						addInfo("Startdate: " + temp.toString());
-						startDate = temp.toDate();
-						endDate = temp.plusMonths(1).minusMillis(1).toDate();
-					} else if (startDate.after(valueDate) || endDate.before(valueDate)) {
-						throw new UnsupportedOperationException("Alle Daten müssen in einem Monat liegen.");
-					}
-				}
+				String accountNumber = csvData[i][0];
+				String bankSortingCode = csvData[i][1];
+				// Number openingBalance = df.parse(csvData[i][3]);
+				Date bookingDate = inFormat.parse(csvData[i][5]);
+				String balanceCurrency = csvData[i][4];
+				Number closingBalance = df.parse(csvData[i][3]);
 
-				if (amount != null) {
-					openingBalance -= amount.doubleValue();
+				if (!checkDate.equals(csvData[i][2])) {
+					ms.addField(new TransactionReferenceNumber());
+					// ms.addField(new RelatedReferenceNumber());
+					ms.addField(new AccountDesignation(accountNumber,
+							bankSortingCode, currency));
+					// ms.addField(new AccountStatementNumber("" +
+					// statementNumber, ""));
+					ms.addField(new AccountStatementNumber());
+					ms.addField(new OpeningBalance(true, (openingBalance
+							.doubleValue() > 0), bookingDate, balanceCurrency,
+							openingBalance));
+					checkDate = csvData[i][2];
 				}
+				
+				for (; i < csvData.length; i++) {
+
+					System.out.println(csvData[i][5]);
+
+					if (!checkDate.equals(csvData[i][2])) {
+						i--;
+						checkDate = csvData[i][2];
+						continue;
+					}
+				
+
+					Date valueDate = inFormat.parse(csvData[i][6]);
+					String bookingText = csvData[i][7];
+					String bookingCode = tob.getTransactionCode(csvData[i][7]);
+					String swiftCode = tob.getSwiftCode(csvData[i][7]);
+					String bookingPurpose = csvData[i][8];
+					String orderingName = csvData[i][9];
+					Number amount = df.parse(csvData[i][10]);
+					String amountCurrency = csvData[i][11];
+					bookingDate = inFormat.parse(csvData[i][5]);
+
+					ms.addField(new TurnOverLine(valueDate, bookingDate,
+							(amount.doubleValue() > 0), false, amountCurrency,
+							amount, swiftCode, "", ""));
+					ms.addField(new MultiPurposeField(bookingCode, bookingText,
+							bookingPurpose, orderingName));
+				}
+				ms.addField(new ClosingBalance(true, (closingBalance
+						.doubleValue() > 0), bookingDate, balanceCurrency,
+						closingBalance));
+				m.addSection(ms);
+				ms = new MT940Section();
+				statementNumber++;
+				openingBalance = closingBalance;
 			}
-
-			String balanceCurrency = currency;
-
-			// initial balance, calculated
-			MT940Section ms = new MT940Section();
-			ms.addField(new TransactionReferenceNumber());
-			// ms.addField(new RelatedReferenceNumber());
-			ms.addField(new AccountDesignation(accountNumber,
-					bankSortingCode, currency));
-			// ms.addField(new AccountStatementNumber("" +
-			// statementNumber, ""));
-			ms.addField(new AccountStatementNumber());
-			ms.addField(new OpeningBalance(true, (openingBalance > 0), startDate, balanceCurrency,
-					openingBalance));
-
-			for (int i = csvData.length - 1; i > 0; i--) { // reverse order to have output old -> new
-				Date valueDate = inFormat.parse(csvData[i][dateIdx]);
-				String bookingText = csvData[i][bookingTextIdx],
-						bookingTextLong = "",
-						counterParty = csvData[i][counterPartyIdx],
-						customerRef = "", orderingAccNo = "", orderingName = "", bankRef = "";
-//				List<String> customerIdentification = new ArrayList<String>();
-				String[] bookingTextSplit = StringUtils.split(bookingText, " :"),
-						counterPartySplit = StringUtils.split(counterParty, ",:");
-
-				String fidorBookingString = bookingTextSplit[0], prev;
-				bookingText = StringUtils.strip(StringUtils.substringAfter(bookingText, fidorBookingString), " :"); // cut away fidorBookingString
-				if (bookingText.length() > MAX_BOOKING_TEXT) {
-					bookingTextLong = bookingText.substring(MAX_BOOKING_TEXT);
-					bookingText = bookingText.substring(0, MAX_BOOKING_TEXT);
-				}
-
-				if (counterPartySplit.length > 0) {
-					prev = counterPartySplit[0];
-					for (int j = 1; j < counterPartySplit.length; j++) {
-						String current = counterPartySplit[j];
-						if ("absender".equalsIgnoreCase(prev)
-								|| "empfänger".equalsIgnoreCase(prev)) {
-							orderingName = current;
-						} else if ("iban".equalsIgnoreCase(prev)) {
-//						customerIdentification.add("IBAN: " + current);
-							orderingAccNo = current;
-						} else if ("bic".equalsIgnoreCase(prev)) {
-							bankRef = current;
-						}
-						prev = current;
-					}
-				}
-
-				// overwrite customerRef if UMR is available
-				prev = bookingTextSplit[0];
-				for (int j = 1; j < bookingTextSplit.length; j++) {
-					String current = bookingTextSplit[j];
-					if ("umr".equalsIgnoreCase(prev)) { // Unique Mandate Reference (= Eindeutige Mandatsnummer)
-//						customerIdentification.add("UMR: " + current);
-						customerRef = current; // everything else is too long anyway
-					} else if ("uci".equalsIgnoreCase(prev)) { // Unique Creditor Identifier, Gläubigeridentifikationsnummer
-//						customerIdentification.add("UCI: " + current);
-					}
-					prev = current;
-				}
-
-				// TODO: parse bookingText, counterParty
-				String bookingCode = TOB5BookingCodeTranslator.getTransactionCode(fidorBookingString),
-						swiftCode = TOB5BookingCodeTranslator.getSwiftCode(fidorBookingString);
-
-				Number amount = df.parse(csvData[i][amountIdx]);
-				String amountCurrency = currency;
-				// StringUtils.join(customerIdentification, ", ")
-				ms.addField(new TurnOverLine(valueDate, valueDate,
-						(amount.doubleValue() > 0), false, amountCurrency,
-						amount, swiftCode, customerRef, bankRef));
-				ms.addField(new MultiPurposeField(bookingCode, bookingText,
-						bookingTextLong, orderingAccNo, orderingName));
-			}
-			ms.addField(new ClosingBalance(true, (closingBalance > 0), endDate, balanceCurrency,
-					closingBalance));
-			m.addSection(ms);
 		} catch (ArrayIndexOutOfBoundsException aiobe) {
 			aiobe.printStackTrace();
 			addInfo("Keine gültige CSV-Datei! Abbruch...");
