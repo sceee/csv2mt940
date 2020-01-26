@@ -1,9 +1,9 @@
 /*
  * Created on 22.09.2004
  */
-package mt940.fields;
+package csvtomt940.mt940.fields;
 
-import mt940.MT940Field;
+import csvtomt940.mt940.MT940Field;
 
 /**
  * @author Joscha Feth

@@ -5,12 +5,15 @@
  * Window - Preferences - Java - Code Style - Code Templates
  */
 
+package csvtomt940;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.text.ParseException;
@@ -21,25 +24,22 @@ import java.util.List;
 import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.nio.charset.StandardCharsets;
 
-import mt940.MT940File;
-import mt940.MT940Section;
-import mt940.TOB5BookingCodeTranslator;
-import mt940.fields.AccountDesignation;
-import mt940.fields.AccountStatementNumber;
-import mt940.fields.ClosingBalance;
-import mt940.fields.MultiPurposeField;
-import mt940.fields.OpeningBalance;
-import mt940.fields.TransactionReferenceNumber;
-import mt940.fields.TurnOverLine;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
-import org.apache.commons.io.Charsets;
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang3.StringUtils;
-import org.joda.time.DateTime;
+
+import csvtomt940.mt940.MT940File;
+import csvtomt940.mt940.MT940Section;
+import csvtomt940.mt940.TOB5BookingCodeTranslator;
+import csvtomt940.mt940.fields.AccountDesignation;
+import csvtomt940.mt940.fields.AccountStatementNumber;
+import csvtomt940.mt940.fields.ClosingBalance;
+import csvtomt940.mt940.fields.MultiPurposeField;
+import csvtomt940.mt940.fields.OpeningBalance;
+import csvtomt940.mt940.fields.TransactionReferenceNumber;
+import csvtomt940.mt940.fields.TurnOverLine;
 
 /**
  * @author Joscha Feth
@@ -101,7 +101,7 @@ public class CsvToMT940 {
 		}
 		return new String(bytes);
 	} */
-	public static void main(String[] args) {
+	public static void execute(double closingBal) {
 		// parse ini file
 		File jarPath=new File(CsvToMT940.class.getProtectionDomain().getCodeSource().getLocation().getPath());
 		String configFilename = jarPath.getParentFile().getAbsolutePath() + "\\config.ini"; // System.getProperty("user.home") + pathSeparator + ".CSV2MT940" + pathSeparator + "config.ini";
@@ -161,7 +161,7 @@ public class CsvToMT940 {
 		}
 
 		// Closing Balance
-		closingBalance = Double.parseDouble(args[0]);
+		closingBalance = closingBal;
 
 		// Start conversion
 		convert();

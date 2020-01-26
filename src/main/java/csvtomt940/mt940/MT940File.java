@@ -1,7 +1,7 @@
 /*
  * Created on 21.09.2004
  */
-package mt940;
+package csvtomt940.mt940;
 
 import java.util.ArrayList;
 import java.util.List;

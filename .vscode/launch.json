@@ -1,0 +1,16 @@
+{
+    // Verwendet IntelliSense zum Ermitteln möglicher Attribute.
+    // Zeigen Sie auf vorhandene Attribute, um die zugehörigen Beschreibungen anzuzeigen.
+    // Weitere Informationen finden Sie unter https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Debug App",
+            "request": "launch",
+            "mainClass": "csvtomt940.App",
+            "projectName": "CSVtoMT940",
+            "args": "10.10"
+        }
+    ]
+}

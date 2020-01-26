@@ -1,3 +1,4 @@
+package csvtomt940;
 
 import java.io.File;
 
@@ -7,7 +8,7 @@ import java.io.File;
 /**
  * @author Joscha Feth
  */
-public class CsvFilter extends FileActions {
+public class MT940Filter extends FileActions {
 
 	@Override
 	public boolean accept(File f) {
@@ -16,18 +17,18 @@ public class CsvFilter extends FileActions {
 		}
 		String extension = getExtension(f);
 		if (extension != null) {
-			if (extension.equals("csv") || extension.equals("txt")) {
+			if (extension.equals("pcc") || extension.equals("940") || extension.equals("txt")) {
 				return true;
 			} else {
 				return false;
 			}
 		}
-
 		return false;
 	}
 
 	@Override
 	public String getDescription() {
-		return "CSV (*.csv) und TXT (*.txt) Dateien";
+		return "940 (*.940), PCC (*.pcc) und TXT (*.txt) Dateien";
 	}
+
 }
