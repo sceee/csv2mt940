@@ -3,7 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package mt940;
+package csvtomt940.mt940;
 
 /**
  *

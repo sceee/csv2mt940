@@ -1,7 +1,7 @@
 /*
  * Created on 22.09.2004
  */
-package mt940;
+package csvtomt940.mt940;
 
 /**
  * @author Joscha Feth

@@ -1,4 +1,4 @@
-package mt940;
+package csvtomt940.mt940;
 
 import java.util.Hashtable;
 
